@@ -25,6 +25,9 @@
 #define ANGLE_MIN 300
 #define ANGLE_CENTRE 404
 #define ANGLE_MAX 500
+#define SPEED_MAX 2.f
+#define DISTANCE_MAX 20.f
+#define PRECISION_LIDAR 0.3
 
 /**
  * TODO config this with ros parameters
@@ -34,7 +37,7 @@ using namespace std;
 int _PI;
 bool run =false ; // mettre à false
 
-void set_direction(float angle, float angle_max)
+void set_direction(float angle)
 {
 	//TODO add convertion form angle to servo plus limitation
 	if(angle > angle_max)
@@ -46,13 +49,13 @@ void set_direction(float angle, float angle_max)
 	set_servo_pulsewidth(_PI, GPIO_SERVO, angle);
 }
 
-void set_speed(float speed, float speed_max)
+void set_speed(float speed)
 {
 	//TODO add converstion from speed to ESC plus limitation
-	if(speed > speed_max)
-		speed = speed_max;
-	if(speed < -speed_max)
-		speed = -speed_max;
+	if(speed > SPEED_MAX)
+		speed = SPEED_MAX;
+	if(speed < -SPEED_MAX)
+		speed = -SPEED_MAX;
  	
 	speed = 1000 * speed + 1500;
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
@@ -65,7 +68,8 @@ void set_speed(float speed, float speed_max)
 
 float asservSpeed(float speed_max, float x, float coef_speed,float dist_center)
 {
-	return (Base_Speed +exp(-coef_speed *abs(x) / pow(dist_center, 2)) * speed_max/100);
+	float speed=0;
+	return speed;
 }
 
 /**
@@ -73,21 +77,9 @@ float asservSpeed(float speed_max, float x, float coef_speed,float dist_center)
  * the center of the circuit
  */
 
-float asservDirection(float angle_max, float x, float coef_angle)
+float asservDirection(float angle_dist_max)
 {
-	float a = angle_max/(1 - exp(-coef_angle * pow(L, 2)/4));
-	float angle;	
-
-	if(x < 0)
-	{
-		angle = a * (1 - exp(-coef_angle * pow(x, 2)));
-	}
-	else
-	{
-		angle = -a * (1 - exp(-coef_angle * pow(x, 2)));
-	}
-
-	angle=angle/divang;
+	float angle=0;
 	return angle;
 }
 
@@ -101,24 +93,32 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	float acc=0;
 	int d=5;
 	int imax=0;
-	float max=0;
+	float dist_max=0;
+	float valeur=0;
 	for(int i=ANGLE_MIN+(d-1)/2; i<ANGLE_MAX-(d-1)/2; i++)
 	{
 		acc=0;
 		for(int j=i-(d-1)/2; j<i+(d-1)/2; j++)
 		{
-			// Traiter valeur inf
-			// > a valeur max = valeur max
-			// =0 = valeur max 
-
-			acc+=scan_in->ranges[j];
+			valeur=scan_in->ranges[j];
+			if(valeur>DISTANCE_MAX || valeur==0)
+				valeur=DISTANCE_MAX;
+				
+			acc+=valeur;
 		}
 		if(acc/d>max)
 		{
 			imax=i;
-			max=acc/d;
+			dist_max=acc/d;
 		}
 	}
+
+	float angle_dist_max=imax*PRECISION_LIDAR;
+
+	float angle=asservDirection(angle_dist_max);
+	float speed=asservSpeed(dist_max);
+	setDirection(angle);
+	setSpeed(speed);
 }
 
 void control_callback(const std_msgs::String::ConstPtr &msg)
