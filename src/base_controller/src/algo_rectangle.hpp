@@ -66,7 +66,7 @@ float commandDirection(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	{
 		// on borne distance vu
 		dist=scan_in->ranges[i];
-		if(scan_in->ranges[i]>DISTANCE_MAX)
+		if(scan_in->ranges[i]>DISTANCE_MAX || scan_in->ranges[i]==0)
 			dist=DISTANCE_MAX;
 
 		// cherche max
