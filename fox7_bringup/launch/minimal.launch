@@ -1,0 +1,21 @@
+<launch>
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch"/>
+
+  <node pkg="web_video_server" type="web_video_server" name="video_server">
+    <param name="address" type="string" value="192.168.1.158" />
+  </node>
+
+  <node pkg="base_controller" type="controller" name="controller" output="screen">
+  </node>
+
+  <node pkg="odometry" type="odometry" name="odometry" output="screen">
+  </node>
+
+  <node pkg="usb_cam" type="usb_cam_node" name="camera" output="screen">
+    <param name="image_width" type="int" value="352" />
+    <param name="image_height" type="int" value="288" />
+    <param name="framerate" type="int" value="15" />
+    <param name="pixel_format" type="string" value="mjpeg" />
+  </node>
+
+</launch>
