@@ -4,65 +4,41 @@
 #include <cstdio>
 #include <cmath>
 
-#define PIN_EN_A 15
-#define PIN_IN_1 18
-#define PIN_IN_2 23
-
-#define PIN_EN_B 17
-#define PIN_IN_3 27
-#define PIN_IN_4 22
-
-#define DIST_ENTRAXE 0.3
-
+#define PWM_0 12 //18
+#define PWM_1 13 //19
+/**
+ * TODO config this with ros parameters
+ */
 using namespace std;
 
 int PI;
 
-float speed_target_r;
-float speed_target_l;
-
-void set_speed_left(int speed)
+void set_direction(int angle)
 {
-	if(speed > 0)
-	{
-		gpio_write(PI, PIN_IN_1, 1);
-		gpio_write(PI, PIN_IN_2, 0);
-		set_PWM_dutycycle(PI, PIN_EN_A, speed);
-	}
-	else
-	{
-		gpio_write(PI, PIN_IN_1, 0);
-		gpio_write(PI, PIN_IN_2, 1);
-		set_PWM_dutycycle(PI, PIN_EN_A, -speed);
-	}
+	//TODO add convertion form angle to servo plus limitation
+	set_PWM_dutycycle(PI, PIN_SERVO, angle);
 }
 
-void set_speed_right(int speed)
+void set_speed(int speed)
 {
-	if(speed > 0)
-	{
-		gpio_write(PI, PIN_IN_3, 0);
-		gpio_write(PI, PIN_IN_4, 1);
-		set_PWM_dutycycle(PI, PIN_EN_B,speed);
-	}
-	else
-	{
-		gpio_write(PI, PIN_IN_3, 1);
-		gpio_write(PI, PIN_IN_4, 0);
-		set_PWM_dutycycle(PI, PIN_EN_B,-speed);
-	}
+	//TODO add converstion from speed to ESC plus limitation
+	set_PWM_dutycycle(PI, PIN_ESC, speed);
 }
 
-void cmd_callback(const geometry_msgs::Twist::ConstPtr& cmd_vel)
-{
-		speed_target_r = 250*cmd_vel->linear.x + 250*cmd_vel->angular.z;
-		speed_target_l = 250*cmd_vel->linear.x - 250*cmd_vel->angular.z;
 }
 
-void reg_callback(const ros::TimerEvent& trash)
+void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 {
-	set_speed_left((int)speed_target_l);
-	set_speed_right((int)speed_target_r);
+	int angle;
+	float speed;
+	float angle = scan_in->angle_min;
+	float increment = scan_in->scan_in->increment;
+
+	//TODO add algorythm adrien
+	
+
+	set_direction(angle);
+	set_speed(speed);
 }
 
 int main(int argc, char** argv)
@@ -72,7 +48,8 @@ int main(int argc, char** argv)
 	ros::NodeHandle n;
 
 	PI = pigpio_start(NULL, NULL);
-
+	
+	//TODO change init
 	set_mode(PI, PIN_IN_1, PI_OUTPUT);
 	set_mode(PI, PIN_IN_2, PI_OUTPUT);
 	set_mode(PI, PIN_IN_3, PI_OUTPUT);
@@ -80,13 +57,9 @@ int main(int argc, char** argv)
 	set_PWM_frequency(PI, PIN_EN_A, 100000);
 	set_PWM_frequency(PI, PIN_EN_B, 100000);
 
-	ros::Subscriber sub = n.subscribe("cmd_vel", 1000, cmd_callback);
-	ros::Timer timer = n.createTimer(ros::Duration(0.01), reg_callback);
+	ros::Subscriber sub = n.subscribe("scan", 1000, cmd_callback);
 
 	ros::spin();
-
-	set_speed_left(0);
-	set_speed_right(0);
 
 	pigpio_stop(PI);
 
