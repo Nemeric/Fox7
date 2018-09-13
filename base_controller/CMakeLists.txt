@@ -3,14 +3,15 @@ project(base_controller)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  geometry_msgs
+  laser_geometry
+  std_msgs
 )
 
 
 find_library(PIGPIOD_IF2_LIBRARY pigpiod_if2 /usr/local/lib)
 
 catkin_package(
-	DEPENDS pigpiod_if2
+	DEPENDS pigpiod_if2 
 )
 
 ###########
