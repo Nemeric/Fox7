@@ -2,8 +2,10 @@
 #define	PIN_H
 
 // pin io et pwm à déf
-#define PINIO_0 _RA2
-#define PINIO_1 _RA3
+#define PINIO_0 RA2
+#define PINIO_1 RA3
+
+#define PIN_US RB4
 
 #define PIN_MOTEUR_IN RA3
 #define PIN_MOTEUR_OUT RA5
