@@ -8,7 +8,8 @@
 #ifndef TIMERS_H
 #define	TIMERS_H
 
-#include <stdint.h>
+void Init_Clk (void);
+void initTimers(void);
 
 #endif	/* TIMERS_H */
 

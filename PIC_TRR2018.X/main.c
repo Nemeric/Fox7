@@ -5,22 +5,22 @@
  * Created on 12 septembre 2018, 12:59
  */
 
-// peut enlever include pic et surement d'autre
-#include <pic18f25k80.h>
-#include "pin.h"
-
-#include <stdio.h>
-//#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-
-#include <xc.h>
-//#include <libpic30.h>
-//#include "qei.h" 
-
 #pragma config FOSC = INTIO2    // Oscillator (Internal RC oscillator)
 #pragma config PLLCFG = ON      // PLL x4 Enable bit (Enabled)
 #pragma config WDTEN = OFF      // Watchdog Timer (WDT disabled in hardware; SWDTEN bit disabled)
+#pragma config XINST = OFF       // Extended Instruction Set (Enabled)
+
+
+#include <xc.h>
+#include "pin.h"
+
+
+//#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "Timers.h"
+
+
 
 // Clock 64Mhz
 // Diviser l'horloge principale par 6666 pour baud uart avec arduino a 9600
@@ -55,33 +55,20 @@ void initUART()
     // Trouver le flag
 }
 
-void initTimers()
-{
-    // Est ce qu'on garde le 0 pour avoir des ticks seulement toute les 500ms
-    // créer une variable qui compte ?
-    // Initialisation du timer0
-    T0CONbits.TMR0ON=0;  // Désactive le timer
-    T0CONbits.T08BIT=0;  // Mode 16bit
-    T0CONbits.T0CS=0;    // Mode Timer
-    T0CONbits.T0SE=0;    // Low to High
-    T0CONbits.PSA=0;     // Autorise subdivision
-    T0CONbits.T0PS2=0;
-    T0CONbits.T0PS1=0;   // Choix subdivision
-    T0CONbits.T0PS0=0;
-    TMR0=0x00;
-    
-    //Initialisation timer1? pour ultrason
-    
-}
 
 
 void main(int argc, char** argv) 
 {
-    bool arretUrgence;
-    arretUrgence=false;
+    uint8_t arretUrgence = 0;
+    //arretUrgence = 0;
+    uint8_t flagUART = 0;
+    uint16_t Val_Timer = 0;
+    uint16_t Last_Val_Timer = 0;
+    uint16_t val16;
   
     // penser à reséparer en fichier propre
     
+    Init_Clk();
     initIO();
     initTimers();
     
@@ -93,14 +80,30 @@ void main(int argc, char** argv)
     // Gestion XBEE-> avec UART (pas besoin de faire plus normalement 
     
     // Gestion ultrason
-
+    
+    // active sortie LED
+    TRISCbits.TRISC5 = 0;
     
     while(1)
     {
+        
+        TMR0H   =0x00;
+        TMR0L   =0x00;
+        Val_Timer = 0;
+        while (Val_Timer < 62500) {     //62.5kHz
+            Val_Timer = TMR0L;
+            val16 = TMR0H;
+            val16 = val16 << 8;
+            Val_Timer += val16;
+            Last_Val_Timer = Val_Timer;
+        }
+        // joue avec la sortie LED
+        LATCbits.LATC5 = 1 - LATCbits.LATC5;
         // Lecture pin in Raspi IO
         
         // test si on a recu un truc avant delay max atteint
         // compile pas car faut remplacer flagUART par le vrai, pas encore trouver ....
+        /*
         if(flagUART==1 && TMR0<DELAY_MAX)
         {
             flagUART=0;
@@ -110,7 +113,7 @@ void main(int argc, char** argv)
         // si rien recu avant delay max -> arret urgence
         if(TMR0>DELAY_MAX)
         {
-            arretUrgence=true;
+            arretUrgence=1;
         }
         
         // Action principale
@@ -119,7 +122,9 @@ void main(int argc, char** argv)
             // Transmettre info de la raspi (moteur+servo)
             PIN_MOTEUR_OUT=PIN_MOTEUR_IN;
             PIN_SERVO_OUT=PIN_SERVO_IN;
-        }
+        }*/
+        
+        
     }
 
 }

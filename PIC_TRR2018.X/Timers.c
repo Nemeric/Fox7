@@ -1,28 +1,38 @@
+#include <xc.h>
+#include <stdint.h>
 #include "Timers.h"
 
+void Init_Clk (void)
+{
+    int i = 1;
+    OSCCONbits.IRCF = 7;    // choix du 16MHZ
+    OSCTUNEbits.PLLEN = 1;  // fait fois 4
+    while (i)   // pause de stabilisation de PLL
+        i++;
+}
 
-void __attribute__((interrupt, auto_psv)) _SPI2Interrupt(void) {
-    static uint8_t Start = 0;
-    uint8_t Etat_Pin_Laisse = 0;
-    static uint8_t Count_Laisse = 0;
-    static char count_Evit = 5;
-
-    if (Etat_Pin_Laisse) {
-        if (Count_Laisse < 30)
-            Count_Laisse++;
-    } else {
-        if (Count_Laisse)
-            Count_Laisse--;
-    }
+void initTimers(void)
+{
+    // Est ce qu'on garde le 0 pour avoir des ticks seulement toute les 500ms
+    // créer une variable qui compte ?
+    // Initialisation du timer0
     
+    // recoit FOSC/4
+    // donc en théorie 64 / 4 => 16MHz
+    // div by 256 => 62.5 kHz
+    T0CONbits.TMR0ON=0;  // Désactive le timer
+    T0CONbits.T08BIT=0;  // Mode 16bit
+    T0CONbits.T0CS=0;    // Mode Timer
+    T0CONbits.T0SE=0;    // Low to High
+    T0CONbits.PSA=0;     // Autorise subdivision
+    T0CONbits.T0PS = 7; // Choix subdivision  (div by 256)
 
-
-    count_Evit--;
-    if (!count_Evit) {
-//        Gestion_Evitement_Every_few_ms();
-        count_Evit = 5;
-    }
+    TMR0H   =0x00;
+    TMR0L   =0x00;
     
     
-//    IFS2bits.SPI2IF = 0;    // clear le flag d'ici
+    T0CONbits.TMR0ON=1;  // Ré-sactive le timer
+    
+    //Initialisation timer1? pour ultrason
+    
 }
