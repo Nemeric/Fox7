@@ -27,13 +27,17 @@
 // BRG16=0 et BRGH=0
 
 #define DELAY_MAX 1000
-#define TIMER_BASE_500MS 0x85CA // Attention avec clk 16MHz, peut pas avec 64MHz
-#define BASE_500MSH 0x85
-#define BASE_500MSL 0xCA
+#define TIMER_BASE_500MS 0x7A12 // Attention avec clk 16MHz, peut pas avec 64MHz
+#define BASE_500MSH 0x7A
+#define BASE_500MSL 0x12
 
 void initIO()
 {
     // Gerer TRIS
+    TRISCbits.TRISC0 = 0;
+    TRISCbits.TRISC1 = 0;
+    TRISCbits.TRISC2 = 1;
+    TRISCbits.TRISC3 = 1;
     
     // active sortie LED
     TRISCbits.TRISC5 = 0;
@@ -59,22 +63,14 @@ void initUART()
 
 void main(int argc, char** argv) 
 {
-    //uint8_t nbTour=0;
-    //uint8_t tempo=0;
     uint8_t arretUrgence = 0;
-  
-    // penser à reséparer en fichier propre
     
     Init_Clk();
     initIO();
     initTimers();    
     initUART();
     
-    LATCbits.LATC5 = 0; // a enlever
-    
-    // Gestion XBEE-> avec UART (pas besoin de faire plus normalement 
-    
-    // Gestion ultrason
+    LATCbits.LATC5 = 1; // On allume une 1ere fois la LED 
     
     while(1)
     {        
@@ -90,8 +86,8 @@ void main(int argc, char** argv)
         } 
          
         // flag uart, test si on a reçu un truc avec l'uart
+        //if(RCREG1==0x46) // si on reçoit le 'F'
         if(RC1IF)
-        //if(RCREG1==0x46)
         {
             RC1IF=0; // Baisse le flag
             RCREG1=0x00;
