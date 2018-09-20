@@ -5,18 +5,29 @@
 #include <cstdio>
 #include <cmath>
 
+#include "SRTED.h"
+
 #define L 2
 #define PI 3.141592
 
 #define GPIO_SERVO 17
 #define GPIO_ESC 18
+#define GPIO_TRIG 23
+#define GPIO_ECHO 22
+
+#define Base_Speed 0.06
+#define Var_Speed_Max 6
+#define Var_Angle_Max 10
+
 /**
  * TODO config this with ros parameters
  */
 using namespace std;
 
 int _PI;
-bool run = true; // mettre à false
+bool run =false ; // mettre à false
+
+SRTED_t *sonar;	
 
 void set_direction(float angle, float angle_max)
 {
@@ -28,7 +39,7 @@ void set_direction(float angle, float angle_max)
 
 	angle = 1000/angle_max * angle + 1500;
 
-	cout<<"Angle = "<<angle<<endl;
+//	cout<<"Angle = "<<angle<<endl;
 
 	set_servo_pulsewidth(_PI, GPIO_SERVO, angle);
 }
@@ -43,7 +54,7 @@ void set_speed(float speed, float speed_max)
  	
 	speed = 1000 * speed + 1500;
 	
-        cout<<"Vitesse = "<<speed<<endl;
+//        cout<<"Vitesse = "<<speed<<endl;
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
 }
 
@@ -57,7 +68,7 @@ void set_speed(float speed, float speed_max)
 
 float asservSpeed(float speed_max, float x, float coef_speed)
 {
-	return (0.07+exp(-coef_speed * pow(x, 2)) * speed_max/100);
+	return (Base_Speed +exp(-coef_speed * pow(x, 2)) * speed_max/100);
 }
 
 
@@ -93,7 +104,6 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	float dist_left = 0;
 	float dist_right = 0;
 	float dist_center = 0;
-	float MUR = 0;
 	float x;
 	int i;
 
@@ -116,53 +126,47 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	}
 	dist_center = dist_center/10;
 	
-	if (dist_center<0.3)
-	{
-		MUR=0;	
-	}
-	else
-	{
-		MUR=1;
-	}		
-	
 	x = dist_right - dist_left;
 	
-	cout<<"Distance milieu ="<<dist_center<<endl;
-	cout<<"Erreur = "<< x <<endl;
-        // cout Debug tool only
-	float vlim = 9;
-	float thetalim = 10;
-       	if(run)
+	
+       	if(run==true && dist_center>=0.3 )
         {
-	  set_direction(MUR*asservDirection(thetalim, x, 5), thetalim);// 10 angle max en degre
-	  set_speed(MUR*asservSpeed(vlim, x, 2.3), vlim);// 30 pourcentage de la vitesse maximale possible
+	  set_direction(asservDirection(Var_Angle_Max, x, 5), Var_Angle_Max);// 10 angle max en degre
+	  set_speed(asservSpeed(Var_Speed_Max, x, 2.3), Var_Speed_Max);// 30 pourcentage de la vitesse maximale possible
         }
 	else
 	{
-	        cout<<"STOP"<<endl;
-		set_direction(0, thetalim);
-		set_speed(0 , vlim);
+		set_direction(0, Var_Angle_Max);
+		set_speed(0 , Var_Speed_Max);
 	}
+
+	SRTED_manual_read(sonar);
 }
 
 void control_callback(const std_msgs::String::ConstPtr &msg)
 {
-	if(msg->data.c_str() == "Start")
+	if((msg->data.c_str() != "Start")&&(run == false))
+	{
 		run = true;
+	}
 	else
+	{
+		run = false;
+	}
+}
+
+void sonar_callback(SRTED_data_t r)
+{
+	cout << "DEBUG RANGE : " << r.range_cms << "STATUS :" << r.status << endl;
+	if(r.range_cms < 100)
 		run = false;
 }
 
-
-
 int main(int argc, char** argv)
 {
-	cout << "Début main" << endl;
-	int speed;
 	ros::init(argc, argv, "base_controller");
 	ros::NodeHandle n;
 
-	cout<<"debut\n"<<endl;
 
 	_PI = pigpio_start(NULL, NULL);
 	
@@ -170,11 +174,17 @@ int main(int argc, char** argv)
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
 
+	sonar = SRTED(_PI, GPIO_TRIG, GPIO_ECHO, sonar_callback);
+	
 	ros::Subscriber sub = n.subscribe("scan", 1000, cmd_callback);
 	ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
-
+	
+	
+	
 	ros::spin();
 
+	SRTED_cancel(sonar);
+	
 	pigpio_stop(_PI);
 
 	return 0;
