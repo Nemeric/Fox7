@@ -232,7 +232,7 @@ void SRTED_manual_read(SRTED_t *self)
 
    /* timeout if no new reading */
 
-   for (i=0; i<25; i++) /* 0.25 seconds */
+   for (i=0; i<7; i++) /* 0.25 seconds */
    {
       time_sleep(0.01);
       if (self->_new_reading) break;

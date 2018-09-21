@@ -15,9 +15,13 @@
 #define GPIO_TRIG 23
 #define GPIO_ECHO 22
 
-#define Base_Speed 0.06
-#define Var_Speed_Max 6
-#define Var_Angle_Max 10
+#define Base_Speed 0.055
+#define Var_Speed_Max 4
+#define Var_Angle_Max 20
+#define Ka 4
+#define Kv 3
+#define marge 0.1
+#define divang 3.5
 
 /**
  * TODO config this with ros parameters
@@ -26,6 +30,7 @@ using namespace std;
 
 int _PI;
 bool run =false ; // mettre à false
+int nbTour=0;
 
 SRTED_t *sonar;	
 
@@ -38,8 +43,8 @@ void set_direction(float angle, float angle_max)
 		angle = -angle_max;
 
 	angle = 1000/angle_max * angle + 1500;
-
-//	cout<<"Angle = "<<angle<<endl;
+	
+	//cout<<"Angle = "<<angle<<endl;
 
 	set_servo_pulsewidth(_PI, GPIO_SERVO, angle);
 }
@@ -54,7 +59,7 @@ void set_speed(float speed, float speed_max)
  	
 	speed = 1000 * speed + 1500;
 	
-//        cout<<"Vitesse = "<<speed<<endl;
+        //cout<<"Vitesse = "<<speed<<endl;
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
 }
 
@@ -66,9 +71,9 @@ void set_speed(float speed, float speed_max)
  */
 
 
-float asservSpeed(float speed_max, float x, float coef_speed)
+float asservSpeed(float speed_max, float x, float coef_speed,float dist_center)
 {
-	return (Base_Speed +exp(-coef_speed * pow(x, 2)) * speed_max/100);
+	return (Base_Speed +exp(-coef_speed *abs(x) / pow(dist_center, 2)) * speed_max/100);
 }
 
 
@@ -92,6 +97,7 @@ float asservDirection(float angle_max, float x, float coef_angle)
 		angle = -a * (1 - exp(-coef_angle * pow(x, 2)));
 	}
 
+	angle=angle/divang;
 	return angle;
 }
 
@@ -107,6 +113,9 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	float x;
 	int i;
 
+	//cout<<"nbTour="<<nbTour<<endl;
+	cout<<"run="<<run<<endl;
+
 	for(int i = 0; i < 10; i++)
 	{
 		dist_left += scan_in->ranges[313 + i];
@@ -120,25 +129,33 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	}
 	dist_right *= cos(60 * PI / 180.0)/10;
 	
-	for(int i = 0; i < 10; i++)
+	for(int i = 0; i < 30; i++)
 	{
-		dist_center += scan_in->ranges[399 +i];
+		dist_center += scan_in->ranges[389 +i];
 	}
-	dist_center = dist_center/10;
+	dist_center = dist_center/30;
 	
 	x = dist_right - dist_left;
+	if(abs(x)<marge)
+	{
+		x=0;
+	}
+	//cout<<"x="<<x<<endl;
 	
 	
        	if(run==true && dist_center>=0.3 )
         {
-	  set_direction(asservDirection(Var_Angle_Max, x, 5), Var_Angle_Max);// 10 angle max en degre
-	  set_speed(asservSpeed(Var_Speed_Max, x, 2.3), Var_Speed_Max);// 30 pourcentage de la vitesse maximale possible
-        }
+	  set_direction(asservDirection(Var_Angle_Max, x, Ka), Var_Angle_Max);// 10 angle max en degre
+	  set_speed(asservSpeed(Var_Speed_Max, x, Kv,dist_center), Var_Speed_Max);// 30 pourcentage de la vitesse maximale possible
+	//cout<<"fonction normale"<<endl;        
+}
 	else
 	{
 		set_direction(0, Var_Angle_Max);
 		set_speed(0 , Var_Speed_Max);
+		//cout<<"arret demandé"<<endl;	
 	}
+
 
 	SRTED_manual_read(sonar);
 }
@@ -148,6 +165,7 @@ void control_callback(const std_msgs::String::ConstPtr &msg)
 	if((msg->data.c_str() != "Start")&&(run == false))
 	{
 		run = true;
+		nbTour=0;
 	}
 	else
 	{
@@ -157,9 +175,33 @@ void control_callback(const std_msgs::String::ConstPtr &msg)
 
 void sonar_callback(SRTED_data_t r)
 {
+	static int arche=0;
+	static int tour=0;
 	cout << "DEBUG RANGE : " << r.range_cms << "STATUS :" << r.status << endl;
-	if(r.range_cms < 100)
-		run = false;
+
+	if((r.range_cms < 100)&&(r.range_cms>0)&&(r.status==0))
+	{
+		arche++;
+	}
+	else
+	{
+		arche=0;
+		tour=0;
+	}	
+
+	if(arche > 1)
+	{
+		if(tour==0)
+			nbTour+=1;
+		tour=1;
+	}
+
+	if(nbTour>1)
+	{
+		run=false;
+	}
+	cout<<"Arche ="<<arche<<endl;
+	cout<<"Tour ="<<nbTour<<endl;
 }
 
 int main(int argc, char** argv)
@@ -173,9 +215,10 @@ int main(int argc, char** argv)
 	//TODO change init
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
-
-	sonar = SRTED(_PI, GPIO_TRIG, GPIO_ECHO, sonar_callback);
 	
+	SRTED_config(sonar, 0, 150);
+	sonar = SRTED(_PI, GPIO_TRIG, GPIO_ECHO, sonar_callback);
+
 	ros::Subscriber sub = n.subscribe("scan", 1000, cmd_callback);
 	ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
 	
