@@ -1,0 +1,4 @@
+SANITY_VERSION 1
+TMPDIR /home/tchamelot/workspace/yocto/build/tmp
+SSTATE_DIR /home/tchamelot/workspace/yocto/build/sstate-cache
+NATIVELSBSTRING arch
