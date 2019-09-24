@@ -5,8 +5,6 @@
 #include <cstdio>
 #include <cmath>
 
-#include "SRTED.h"
-
 #define L 2
 #define PI 3.141592
 
@@ -30,9 +28,6 @@ using namespace std;
 
 int _PI;
 bool run =false ; // mettre à false
-int nbTour=0;
-
-SRTED_t *sonar;	
 
 void set_direction(float angle, float angle_max)
 {
@@ -43,9 +38,6 @@ void set_direction(float angle, float angle_max)
 		angle = -angle_max;
 
 	angle = 1000/angle_max * angle + 1500;
-	
-	//cout<<"Angle = "<<angle<<endl;
-
 	set_servo_pulsewidth(_PI, GPIO_SERVO, angle);
 }
 
@@ -58,30 +50,23 @@ void set_speed(float speed, float speed_max)
 		speed = -speed_max;
  	
 	speed = 1000 * speed + 1500;
-	
-        //cout<<"Vitesse = "<<speed<<endl;
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
 }
-
-
 
 /***
  * realize speed asserv based on max speed and the distance from
  * the center of the circuit
  */
 
-
 float asservSpeed(float speed_max, float x, float coef_speed,float dist_center)
 {
 	return (Base_Speed +exp(-coef_speed *abs(x) / pow(dist_center, 2)) * speed_max/100);
 }
 
-
 /**
  * realize angle asserv based on max angle and the distance from
  * the center of the circuit
  */
-
 
 float asservDirection(float angle_max, float x, float coef_angle)
 {
@@ -113,13 +98,11 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	float x;
 	int i;
 
-	//cout<<"nbTour="<<nbTour<<endl;
 	cout<<"run="<<run<<endl;
 
 	for(int i = 0; i < 10; i++)
 	{
 		dist_left += scan_in->ranges[313 + i];
-		//cout << "Distance gauche ="<<dist_left<<endl;
 	}
 	dist_left *= cos(60 * PI / 180.0)/10;
 
@@ -140,7 +123,6 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	{
 		x=0;
 	}
-	//cout<<"x="<<x<<endl;
 	
 	
        	if(run==true && dist_center>=0.3 )
@@ -155,9 +137,6 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 		set_speed(0 , Var_Speed_Max);
 		//cout<<"arret demandé"<<endl;	
 	}
-
-
-	SRTED_manual_read(sonar);
 }
 
 void control_callback(const std_msgs::String::ConstPtr &msg)
@@ -165,7 +144,6 @@ void control_callback(const std_msgs::String::ConstPtr &msg)
 	if((msg->data.c_str() != "Start")&&(run == false))
 	{
 		run = true;
-		nbTour=0;
 	}
 	else
 	{
@@ -173,42 +151,10 @@ void control_callback(const std_msgs::String::ConstPtr &msg)
 	}
 }
 
-void sonar_callback(SRTED_data_t r)
-{
-	static int arche=0;
-	static int tour=0;
-	cout << "DEBUG RANGE : " << r.range_cms << "STATUS :" << r.status << endl;
-
-	if((r.range_cms < 100)&&(r.range_cms>0)&&(r.status==0))
-	{
-		arche++;
-	}
-	else
-	{
-		arche=0;
-		tour=0;
-	}	
-
-	if(arche > 1)
-	{
-		if(tour==0)
-			nbTour+=1;
-		tour=1;
-	}
-
-	if(nbTour>1)
-	{
-		run=false;
-	}
-	cout<<"Arche ="<<arche<<endl;
-	cout<<"Tour ="<<nbTour<<endl;
-}
-
 int main(int argc, char** argv)
 {
 	ros::init(argc, argv, "base_controller");
 	ros::NodeHandle n;
-
 
 	_PI = pigpio_start(NULL, NULL);
 	
@@ -216,18 +162,11 @@ int main(int argc, char** argv)
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
 	
-	SRTED_config(sonar, 0, 150);
-	sonar = SRTED(_PI, GPIO_TRIG, GPIO_ECHO, sonar_callback);
-
 	ros::Subscriber sub = n.subscribe("scan", 1000, cmd_callback);
 	ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
 	
-	
-	
 	ros::spin();
 
-	SRTED_cancel(sonar);
-	
 	pigpio_stop(_PI);
 
 	return 0;

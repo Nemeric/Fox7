@@ -25,7 +25,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(controller src/controller.cpp src/SRTED.cpp)
+add_executable(controller src/controller.cpp)
 
 target_link_libraries(controller
 	${catkin_LIBRARIES}
