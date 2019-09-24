@@ -2,7 +2,8 @@
 #include <laser_geometry/laser_geometry.h>
 #include <std_msgs/String.h>
 #include <pigpiod_if2.h>
-#include <cstdio>
+//#include <cstdio>
+#include <iostream>
 #include <cmath>
 
 #define L 2
@@ -20,6 +21,10 @@
 #define Kv 3
 #define marge 0.1
 #define divang 3.5
+
+#define ANGLE_MIN 300
+#define ANGLE_CENTRE 404
+#define ANGLE_MAX 500
 
 /**
  * TODO config this with ros parameters
@@ -88,54 +93,31 @@ float asservDirection(float angle_max, float x, float coef_angle)
 
 void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 {
-	float speed;
-	float angle = scan_in->angle_min;
-	float increment = scan_in->angle_increment;
-
-	float dist_left = 0;
-	float dist_right = 0;
-	float dist_center = 0;
-	float x;
-	int i;
-
-	cout<<"run="<<run<<endl;
-
-	for(int i = 0; i < 10; i++)
-	{
-		dist_left += scan_in->ranges[313 + i];
-	}
-	dist_left *= cos(60 * PI / 180.0)/10;
-
-	for(int i = 0; i < 10; i++)
-	{
-		dist_right += scan_in->ranges[495 + i];
-	}
-	dist_right *= cos(60 * PI / 180.0)/10;
+	cout << endl;
+	cout << "scan300=" << scan_in->ranges[AGNLE_MIN] << endl;
+	cout << "scan404=" << scan_in->ranges[ANGLE_CENTRE] << endl;
+	cout << "scan500=" << scan_in->ranges[ANGLE_MAX] << endl;
 	
-	for(int i = 0; i < 30; i++)
+	float acc=0;
+	int d=5;
+	int imax=0;
+	float max=0;
+	for(int i=ANGLE_MIN+(d-1)/2; i<ANGLE_MAX-(d-1)/2; i++)
 	{
-		dist_center += scan_in->ranges[389 +i];
-	}
-	dist_center = dist_center/30;
-	
-	x = dist_right - dist_left;
-	if(abs(x)<marge)
-	{
-		x=0;
-	}
-	
-	
-       	if(run==true && dist_center>=0.3 )
-        {
-	  set_direction(asservDirection(Var_Angle_Max, x, Ka), Var_Angle_Max);// 10 angle max en degre
-	  set_speed(asservSpeed(Var_Speed_Max, x, Kv,dist_center), Var_Speed_Max);// 30 pourcentage de la vitesse maximale possible
-	//cout<<"fonction normale"<<endl;        
-}
-	else
-	{
-		set_direction(0, Var_Angle_Max);
-		set_speed(0 , Var_Speed_Max);
-		//cout<<"arret demandé"<<endl;	
+		acc=0;
+		for(int j=i-(d-1)/2; j<i+(d-1)/2; j++)
+		{
+			// Traiter valeur inf
+			// > a valeur max = valeur max
+			// =0 = valeur max 
+
+			acc+=scan_in->ranges[j];
+		}
+		if(acc/d>max)
+		{
+			imax=i;
+			max=acc/d;
+		}
 	}
 }
 
@@ -157,6 +139,12 @@ int main(int argc, char** argv)
 	ros::NodeHandle n;
 
 	_PI = pigpio_start(NULL, NULL);
+	if(_PI<0)
+	{
+		ROS_ERROR("Failed to initialize pigpiod _PI=%d", _PI);
+		return -1;
+	}
+	ROS_INFO("Pigpiod initialized _PI=%d", _PI);
 	
 	//TODO change init
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
