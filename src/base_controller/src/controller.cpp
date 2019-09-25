@@ -29,6 +29,9 @@
 #define DISTANCE_MAX 20.f
 #define PRECISION_LIDAR 0.3
 
+#define CMD_ANGLE_MAX 800
+#define CMD_ANGLE_MIN 0
+
 /**
  * TODO config this with ros parameters
  */
@@ -37,19 +40,19 @@ using namespace std;
 int _PI;
 bool run =false ; // mettre à false
 
-void set_direction(float angle)
+void setDirection(float angle)
 {
 	//TODO add convertion form angle to servo plus limitation
-	if(angle > angle_max)
-		angle = angle_max;
-	if(angle < -angle_max)
-		angle = -angle_max;
+	if(angle > CMD_ANGLE_MAX)
+		angle = CMD_ANGLE_MAX;
+	if(angle < CMD_ANGLE_MIN)
+		angle = CMD_ANGLE_MIN;
 
-	angle = 1000/angle_max * angle + 1500;
+	angle = 1000/CMD_ANGLE_MAX * angle + 1500;
 	set_servo_pulsewidth(_PI, GPIO_SERVO, angle);
 }
 
-void set_speed(float speed)
+void setSpeed(float speed)
 {
 	//TODO add converstion from speed to ESC plus limitation
 	if(speed > SPEED_MAX)
@@ -66,10 +69,10 @@ void set_speed(float speed)
  * the center of the circuit
  */
 
-float asservSpeed(float speed_max, float x, float coef_speed,float dist_center)
+float asservSpeed(float speed)
 {
-	float speed=0;
-	return speed;
+	float c_speed=0;
+	return c_speed;
 }
 
 /**
@@ -86,7 +89,7 @@ float asservDirection(float angle_dist_max)
 void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 {
 	cout << endl;
-	cout << "scan300=" << scan_in->ranges[AGNLE_MIN] << endl;
+	cout << "scan300=" << scan_in->ranges[ANGLE_MIN] << endl;
 	cout << "scan404=" << scan_in->ranges[ANGLE_CENTRE] << endl;
 	cout << "scan500=" << scan_in->ranges[ANGLE_MAX] << endl;
 	
@@ -106,7 +109,7 @@ void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 				
 			acc+=valeur;
 		}
-		if(acc/d>max)
+		if(acc/d>dist_max)
 		{
 			imax=i;
 			dist_max=acc/d;
