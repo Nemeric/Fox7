@@ -15,7 +15,7 @@
 			padding: 0;
 			margin: 0;
 			background-color: #BBB;
-		}
+	
 		#info {
 			position: absolute;
 			top: 0px;
@@ -43,7 +43,7 @@
 </head>
 
 <body>
-	<div id="container">
+	<div id="container" >
 		<center>
 			<h3>Fox7 Virtual Teleop Frontview</h3>
 				<form>
@@ -51,14 +51,39 @@
 
 			</form>
 			<p>Running</p>
+
+
+
+
+		</center>
+	</div>
+	<div id="container2">	
+	<center>
+		<div style="width:200px;height:200px;border:1px solid #000;" id="container1">
+			
+					<input type="button" value="test">
+
+		</div>
+	</center>
+	</div>
+
+	<div id="text_zone">
+		<center>
+			
+			 <form>
+				  Coef 1 : <input type="text" name="coef1" id="coef1" maxlenght="4" size="4"><br>
+				  Coef 2 : <input type="text" name="coef2" id="coef2" maxlength="4" size="4"><br>
+				  <input type="button" id="submit" value="Submit" >
+			</form> 
+			
 		</center>
 	</div>
 
-	
 	<script type="text/javascript">
 		var ros = new ROSLIB.Ros({
 	    		url : 'ws://10.42.0.1:9090'
 	  	});
+
 
 		ros.on('connection', function() {
 			console.log('Connected to websocket server.');
@@ -101,7 +126,7 @@
 			});
 			control.publish(str_msgs);
 		}
-	<! ********>
+
 
 		var cmdVel = new ROSLIB.Topic({
 			ros: ros,
@@ -112,11 +137,13 @@
 		console.log("touchscreen is", VirtualJoystick.touchScreenAvailable() ? "available" : "not available");
 		
 		var joystick = new VirtualJoystick({
-			container: document.getElementById('container'),
+			container: document.getElementById('container2'),
 			mouseSupport: true,
 			stationaryBase: false,
-			baseX: window.innerWidth / 2,
-			baseY: window.innerHeight / 1.4,
+			//baseX: window.innerWidth /2,
+			baseX: window.innerWidth / 2 ,
+			baseY: window.innerHeight /1.4,
+			//baseY: window.innerHeight /1.4,
 			limitStickTravel: true,
 			stickRadius: window.innerWidth / 4,
 			strokeStyle: 'red'
@@ -125,6 +152,7 @@
 		joystick.addEventListener('touchStart', function() {})
 		joystick.addEventListener('touchEnd', function() {})
 		
+
 		setInterval(function() {
 			var outputEl = document.getElementById('result');
 			var scale = 100;
@@ -163,7 +191,22 @@
 
 			cmdVel.publish(twist);
 		}, 1 / 30 * 1000);
+		
+		var coef1 = document.getElementById("coef1").value;
+		var coef2 = document.getElementById("coef2").value;
+		document.getElementById("submit").onclick = displayCoef;		
+		function displayCoef(){
+			coef1 = document.getElementById("coef1").value;
+			coef2 = document.getElementById("coef2").value;
+			console.log(coef1,coef2);
+			var str = coef1.toString() + " / " + coef2.toString();
+			var str_msgs = new ROSLIB.Message({
+                                 data: str 
+                         });
+                         control.publish(str_msgs);
 
+		}
+		 
 	</script>
 
 
