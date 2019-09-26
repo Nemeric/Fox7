@@ -40,6 +40,44 @@ using namespace std;
 int _PI;
 bool run =false ; // mettre à false
 
+class AsservSpeed
+{
+public:
+	AsservSpeed(float Kp, float Ki, float Kd)
+		:m_previous_dist(0), m_integrale(0),
+		m_Kp(Kp), m_Ki(Ki), m_Kd(Kd)
+	{}
+
+	float operator()(float dist_max, ros::Duration dt)
+	{
+		
+	}
+
+private:
+	float m_previous_dist;	
+	float m_integrale;
+	const float m_Kp, m_Ki, m_Kd;
+};
+
+class AsservDirection
+{
+public:
+	AsservDirection(float Kp, float Ki, float Kd)
+		:m_previous_dist(0), m_integrale(0),
+		m_Kp(Kp), m_Ki(Ki), m_Kd(Kd)
+	{}
+
+	float operator()(float dist_max, ros::Duration dt)
+	{
+		
+	}
+
+private:
+	float m_previous_dist;	
+	float m_integrale;
+	const float m_Kp, m_Ki, m_Kd;
+};
+
 void setDirection(float angle)
 {
 	//TODO add convertion form angle to servo plus limitation
@@ -64,67 +102,69 @@ void setSpeed(float speed)
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
 }
 
-/***
- * realize speed asserv based on max speed and the distance from
- * the center of the circuit
- */
-
-float asservSpeed(float speed)
+class CmdCallback
 {
-	float c_speed=0;
-	return c_speed;
-}
+public:
+	CmdCallback()
+		:m_last_call(ros::Time::now()), m_dt(0),
+		asservSpeed(1,1,1), asservDirection(1,1,1),
+		m_d(5)
+	{}
 
-/**
- * realize angle asserv based on max angle and the distance from
- * the center of the circuit
- */
-
-float asservDirection(float angle_dist_max)
-{
-	float angle=0;
-	return angle;
-}
-
-void cmd_callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
-{
-	cout << endl;
-	cout << "scan300=" << scan_in->ranges[ANGLE_MIN] << endl;
-	cout << "scan404=" << scan_in->ranges[ANGLE_CENTRE] << endl;
-	cout << "scan500=" << scan_in->ranges[ANGLE_MAX] << endl;
-	
-	float acc=0;
-	int d=5;
-	int imax=0;
-	float dist_max=0;
-	float valeur=0;
-	for(int i=ANGLE_MIN+(d-1)/2; i<ANGLE_MAX-(d-1)/2; i++)
+	void callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	{
-		acc=0;
-		for(int j=i-(d-1)/2; j<i+(d-1)/2; j++)
+		m_dt=ros::Time::now()-m_last_call;
+		m_last_call=ros::Time::now();
+
+		m_imax=0;
+		m_dist_max=0;
+		m_angle_dist_max=0;
+		
+		float valeur=0;
+		// moyenne glissante
+		for(int i=ANGLE_MIN+(m_d-1)/2; i<ANGLE_MAX-(m_d-1)/2; i++)
 		{
-			valeur=scan_in->ranges[j];
-			if(valeur>DISTANCE_MAX || valeur==0)
-				valeur=DISTANCE_MAX;
-				
-			acc+=valeur;
+			m_acc=0;
+			for(int j=i-(m_d-1)/2; j<i+(m_d-1)/2; j++)
+			{
+				// Verif si valeur pas aberante
+				valeur=scan_in->ranges[j];
+				if(valeur>DISTANCE_MAX || valeur==0)
+					valeur=DISTANCE_MAX;
+					
+				m_acc+=valeur;
+			}
+			if(m_acc/m_d>m_dist_max)
+			{
+				m_imax=i;
+				m_dist_max=m_acc/m_d;
+			}
 		}
-		if(acc/d>dist_max)
-		{
-			imax=i;
-			dist_max=acc/d;
-		}
+
+		m_angle_dist_max=m_imax*PRECISION_LIDAR;
+
+		m_cmd_angle = asservDirection(m_angle_dist_max, m_dt);
+		m_cmd_speed = asservSpeed(m_dist_max, m_dt);
+		setDirection(m_cmd_angle);
+		setSpeed(m_cmd_speed);
 	}
+private:
+	ros::Time m_last_call;
+	ros::Duration m_dt;
 
-	float angle_dist_max=imax*PRECISION_LIDAR;
+	float m_acc;
+	float m_dist_max;
+	int m_imax;
+	int m_d;
+	float m_cmd_angle;
+	float m_cmd_speed;
+	float m_angle_dist_max;
 
-	float angle=asservDirection(angle_dist_max);
-	float speed=asservSpeed(dist_max);
-	setDirection(angle);
-	setSpeed(speed);
-}
+	AsservSpeed asservSpeed;
+	AsservDirection asservDirection;
+};
 
-void control_callback(const std_msgs::String::ConstPtr &msg)
+/*void control_callback(const std_msgs::String::ConstPtr &msg)
 {
 	if((msg->data.c_str() != "Start")&&(run == false))
 	{
@@ -134,7 +174,7 @@ void control_callback(const std_msgs::String::ConstPtr &msg)
 	{
 		run = false;
 	}
-}
+}*/
 
 int main(int argc, char** argv)
 {
@@ -152,9 +192,11 @@ int main(int argc, char** argv)
 	//TODO change init
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
-	
-	ros::Subscriber sub = n.subscribe("scan", 1000, cmd_callback);
-	ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
+
+	CmdCallback cmd_callback;
+
+	ros::Subscriber sub = n.subscribe("scan", 1000, &CmdCallback::callback, &cmd_callback);
+	//ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
 	
 	ros::spin();
 
