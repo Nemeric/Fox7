@@ -2,35 +2,29 @@
 #include <laser_geometry/laser_geometry.h>
 #include <std_msgs/String.h>
 #include <pigpiod_if2.h>
-//#include <cstdio>
 #include <iostream>
 #include <cmath>
 
-#define L 2
-#define PI 3.141592
-
 #define GPIO_SERVO 17
 #define GPIO_ESC 18
-#define GPIO_TRIG 23
-#define GPIO_ECHO 22
 
-#define Base_Speed 0.055
-#define Var_Speed_Max 4
-#define Var_Angle_Max 20
-#define Ka 4
-#define Kv 3
-#define marge 0.1
-#define divang 3.5
+#define Kp 1
+#define Ki 1
+#define Kd 1
 
 #define ANGLE_MIN 300
 #define ANGLE_CENTRE 404
 #define ANGLE_MAX 500
-#define SPEED_MAX 2.f
-#define DISTANCE_MAX 20.f
 #define PRECISION_LIDAR 0.3
 
 #define CMD_ANGLE_MAX 800
 #define CMD_ANGLE_MIN 0
+
+#define SPEED_MAX 0.8
+#define SPEED_MIN 0.1
+#define DISTANCE_MAX 20.0
+#define DISTANCE_MIN 0.2
+
 
 /**
  * TODO config this with ros parameters
@@ -40,27 +34,31 @@ using namespace std;
 int _PI;
 bool run =false ; // mettre à false
 
-class CommandSpeed
-{
-public:
-	float operator()(float dist_max)
-	{
-		// definir f(dist_max) = speed_voulue
-		// arrive soon
-		return m_commande;	
-	}
+const float a=(SPEED_MIN-SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
+const float b=2*DISTANCE_MAX*(SPEED_MAX-SPEED_MIN)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
+const float c=(SPEED_MIN*pow(DISTANCE_MAX,2)-2*DISTANCE_MAX*DISTANCE_MIN*SPEED_MAX+pow(DISTANCE_MIN,2)*SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
 
-private:
-	float m_commande;
-};
+float commandSpeed(float dist_max)
+{
+	float speed;
+
+	if(dist_max>DISTANCE_MAX)
+		speed = SPEED_MAX;
+	else if(dist_max<DISTANCE_MIN)
+		speed = SPEED_MIN;
+	else
+		speed = a*pow(dist_max,2)+b*dist_max+c;
+
+	return speed;
+}
 
 class AsservDirection
 {
 public:
-	AsservDirection(float Kp, float Ki, float Kd)
+	AsservDirection(float Kp_p, float Ki_p, float Kd_p)
 		:m_consigne(0),
 		m_integrale(0),m_previous_error(0),
-		m_Kp(Kp), m_Ki(Ki), m_Kd(Kd)
+		m_Kp(Kp_p), m_Ki(Ki_p), m_Kd(Kd_p )
 	{}
 
 	float operator()(float angle_dist_max, ros::Duration dt)
@@ -122,7 +120,7 @@ class CmdCallback
 public:
 	CmdCallback()
 		:m_last_call(ros::Time::now()), m_dt(0),
-		asservDirection(1,1,1),
+		asservDirection(Kp,Ki,Kd),
 		m_d(5)
 	{}
 
@@ -176,7 +174,6 @@ private:
 	float m_cmd_speed;
 	float m_angle_dist_max;
 
-	CommandSpeed commandSpeed;
 	AsservDirection asservDirection;
 };
 
@@ -205,7 +202,6 @@ int main(int argc, char** argv)
 	}
 	ROS_INFO("Pigpiod initialized _PI=%d", _PI);
 	
-	//TODO change init
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
 
