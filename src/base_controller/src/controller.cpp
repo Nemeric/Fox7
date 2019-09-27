@@ -40,42 +40,57 @@ using namespace std;
 int _PI;
 bool run =false ; // mettre à false
 
-class AsservSpeed
+class CommandSpeed
 {
 public:
-	AsservSpeed(float Kp, float Ki, float Kd)
-		:m_previous_dist(0), m_integrale(0),
-		m_Kp(Kp), m_Ki(Ki), m_Kd(Kd)
-	{}
-
-	float operator()(float dist_max, ros::Duration dt)
+	float operator()(float dist_max)
 	{
-		
+		// definir f(dist_max) = speed_voulue
+		// arrive soon
+		return m_commande;	
 	}
 
 private:
-	float m_previous_dist;	
-	float m_integrale;
-	const float m_Kp, m_Ki, m_Kd;
+	float m_commande;
 };
 
 class AsservDirection
 {
 public:
 	AsservDirection(float Kp, float Ki, float Kd)
-		:m_previous_dist(0), m_integrale(0),
+		:m_consigne(0),
+		m_integrale(0),m_previous_error(0),
 		m_Kp(Kp), m_Ki(Ki), m_Kd(Kd)
 	{}
 
-	float operator()(float dist_max, ros::Duration dt)
+	float operator()(float angle_dist_max, ros::Duration dt)
 	{
-		
+		if(dt.toSec()==0)
+			return 0;
+
+		m_error = m_consigne - angle_dist_max;
+
+		m_derivee = m_error - m_previous_error;
+		m_previous_error = m_error;
+
+		m_integrale += m_error;
+
+		m_commande = m_Kp*m_error + m_Ki*dt.toSec()*m_integrale + m_Kd/dt.toSec()*m_derivee;
+
+		return m_commande;
 	}
 
 private:
-	float m_previous_dist;	
+	float m_commande;
+
+	float m_previous_error;	
+
+	float m_derivee;
 	float m_integrale;
 	const float m_Kp, m_Ki, m_Kd;
+
+	float m_error;
+	float m_consigne;
 };
 
 void setDirection(float angle)
@@ -107,7 +122,7 @@ class CmdCallback
 public:
 	CmdCallback()
 		:m_last_call(ros::Time::now()), m_dt(0),
-		asservSpeed(1,1,1), asservDirection(1,1,1),
+		asservDirection(1,1,1),
 		m_d(5)
 	{}
 
@@ -144,7 +159,8 @@ public:
 		m_angle_dist_max=m_imax*PRECISION_LIDAR;
 
 		m_cmd_angle = asservDirection(m_angle_dist_max, m_dt);
-		m_cmd_speed = asservSpeed(m_dist_max, m_dt);
+		m_cmd_speed = commandSpeed(m_dist_max);
+
 		setDirection(m_cmd_angle);
 		setSpeed(m_cmd_speed);
 	}
@@ -160,7 +176,7 @@ private:
 	float m_cmd_speed;
 	float m_angle_dist_max;
 
-	AsservSpeed asservSpeed;
+	CommandSpeed commandSpeed;
 	AsservDirection asservDirection;
 };
 
