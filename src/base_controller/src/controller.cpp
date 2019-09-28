@@ -8,10 +8,6 @@
 #define GPIO_SERVO 17
 #define GPIO_ESC 18
 
-#define Kp 1
-#define Ki 1
-#define Kd 1
-
 #define ANGLE_MIN 300
 #define ANGLE_CENTRE 404
 #define ANGLE_MAX 500
@@ -24,33 +20,23 @@
 #define SPEED_MIN 0.1
 #define DISTANCE_MAX 20.0
 #define DISTANCE_MIN 0.2
+#define DIST_URGENCE 0.1
 
-
-/**
- * TODO config this with ros parameters
- */
 using namespace std;
 
+float commandSpeed(float dist_max);
+void setDirection(float angle);
+void setSpeed(float speed);
+
 int _PI;
-bool run =false ; // mettre à false
+
+float Kp=1;
+float Ki=1;
+float Kd=1;
 
 const float a=(SPEED_MIN-SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
 const float b=2*DISTANCE_MAX*(SPEED_MAX-SPEED_MIN)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
 const float c=(SPEED_MIN*pow(DISTANCE_MAX,2)-2*DISTANCE_MAX*DISTANCE_MIN*SPEED_MAX+pow(DISTANCE_MIN,2)*SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
-
-float commandSpeed(float dist_max)
-{
-	float speed;
-
-	if(dist_max>DISTANCE_MAX)
-		speed = SPEED_MAX;
-	else if(dist_max<DISTANCE_MIN)
-		speed = SPEED_MIN;
-	else
-		speed = a*pow(dist_max,2)+b*dist_max+c;
-
-	return speed;
-}
 
 class AsservDirection
 {
@@ -78,6 +64,13 @@ public:
 		return m_commande;
 	}
 
+	void reset()
+	{
+		m_consigne=0;
+		m_integrale=0;
+		m_previous_error=0;
+	}
+
 private:
 	float m_commande;
 
@@ -90,6 +83,122 @@ private:
 	float m_error;
 	float m_consigne;
 };
+
+class CmdCallback
+{
+public:
+	CmdCallback()
+		:m_last_call(ros::Time::now()), m_dt(0),
+		m_run(false), m_arret_urgence(false),
+		asservDirection(Kp,Ki,Kd),
+		m_d(5)
+	{}
+
+	void callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
+	{
+		m_dt=ros::Time::now()-m_last_call;
+		m_last_call=ros::Time::now();
+
+		if(m_run)
+		{
+			m_imax=0;
+			m_dist_max=0;
+			m_angle_dist_max=0;
+			
+			// moyenne glissante
+			float valeur=0;
+			for(int i=ANGLE_MIN+(m_d-1)/2; i<ANGLE_MAX-(m_d-1)/2; i++)
+			{
+				m_acc=0;
+				for(int j=i-(m_d-1)/2; j<i+(m_d-1)/2; j++)
+				{
+					// Verif si valeur pas aberante
+					valeur=scan_in->ranges[j];
+					if(valeur>DISTANCE_MAX || valeur==0)
+						valeur=DISTANCE_MAX;
+						
+					m_acc+=valeur;
+				}
+				if(m_acc/m_d>m_dist_max)
+				{
+					m_imax=i;
+					m_dist_max=m_acc/m_d;
+				}
+			}
+			m_angle_dist_max=m_imax*PRECISION_LIDAR;
+
+			ROS_INFO("\nAngleMax=%f\nDistMax=%f", m_dist_max, m_angle_dist_max);
+
+			if(m_dist_max<DIST_URGENCE)
+				m_arret_urgence=true;
+
+			if(!m_arret_urgence)
+			{
+				m_cmd_angle = asservDirection(m_angle_dist_max, m_dt);
+				m_cmd_speed = commandSpeed(m_dist_max);
+
+				setDirection(m_cmd_angle);
+				setSpeed(m_cmd_speed);
+			}
+		}
+	}
+
+	void runON()
+	{
+		m_run=true;
+	}
+
+	void runOFF()
+	{
+		m_run=false;
+	}
+
+	bool running()
+	{
+		return m_run;
+	}
+
+	void reset()
+	{	
+		m_last_call=ros::Time::now();
+		m_dt=ros::Duration(0);
+		m_run=false;
+		m_arret_urgence=false;
+		asservDirection.reset();
+	}
+
+private:
+	ros::Time m_last_call;
+	ros::Duration m_dt;
+
+	float m_acc;
+	float m_dist_max;
+	int m_imax;
+	int m_d;
+	float m_cmd_angle;
+	float m_cmd_speed;
+	float m_angle_dist_max;
+
+	bool m_run;
+	bool m_arret_urgence;
+
+	AsservDirection asservDirection;
+};
+CmdCallback cmd_callback;
+
+float commandSpeed(float dist_max)
+{
+	float speed;
+
+	if(dist_max>DISTANCE_MAX)
+		speed = SPEED_MAX;
+	else if(dist_max<DISTANCE_MIN)
+		speed = SPEED_MIN;
+	else
+		speed = a*pow(dist_max,2)+b*dist_max+c;
+
+	return speed;
+}
 
 void setDirection(float angle)
 {
@@ -115,79 +224,17 @@ void setSpeed(float speed)
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
 }
 
-class CmdCallback
+void control_callback(const std_msgs::String::ConstPtr &msg)
 {
-public:
-	CmdCallback()
-		:m_last_call(ros::Time::now()), m_dt(0),
-		asservDirection(Kp,Ki,Kd),
-		m_d(5)
-	{}
+	if(msg->data.c_str()=="Start" && !cmd_callback.running())
+		cmd_callback.runON();
 
-	void callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
-	{
-		m_dt=ros::Time::now()-m_last_call;
-		m_last_call=ros::Time::now();
+	else if(msg->data.c_str()=="Stop" && cmd_callback.running())
+		cmd_callback.runOFF();
 
-		m_imax=0;
-		m_dist_max=0;
-		m_angle_dist_max=0;
-		
-		float valeur=0;
-		// moyenne glissante
-		for(int i=ANGLE_MIN+(m_d-1)/2; i<ANGLE_MAX-(m_d-1)/2; i++)
-		{
-			m_acc=0;
-			for(int j=i-(m_d-1)/2; j<i+(m_d-1)/2; j++)
-			{
-				// Verif si valeur pas aberante
-				valeur=scan_in->ranges[j];
-				if(valeur>DISTANCE_MAX || valeur==0)
-					valeur=DISTANCE_MAX;
-					
-				m_acc+=valeur;
-			}
-			if(m_acc/m_d>m_dist_max)
-			{
-				m_imax=i;
-				m_dist_max=m_acc/m_d;
-			}
-		}
-
-		m_angle_dist_max=m_imax*PRECISION_LIDAR;
-
-		m_cmd_angle = asservDirection(m_angle_dist_max, m_dt);
-		m_cmd_speed = commandSpeed(m_dist_max);
-
-		setDirection(m_cmd_angle);
-		setSpeed(m_cmd_speed);
-	}
-private:
-	ros::Time m_last_call;
-	ros::Duration m_dt;
-
-	float m_acc;
-	float m_dist_max;
-	int m_imax;
-	int m_d;
-	float m_cmd_angle;
-	float m_cmd_speed;
-	float m_angle_dist_max;
-
-	AsservDirection asservDirection;
-};
-
-/*void control_callback(const std_msgs::String::ConstPtr &msg)
-{
-	if((msg->data.c_str() != "Start")&&(run == false))
-	{
-		run = true;
-	}
-	else
-	{
-		run = false;
-	}
-}*/
+	else if(msg->data.c_str()=="Reset")
+		cmd_callback.reset();
+}
 
 int main(int argc, char** argv)
 {
@@ -205,10 +252,8 @@ int main(int argc, char** argv)
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
 
-	CmdCallback cmd_callback;
-
 	ros::Subscriber sub = n.subscribe("scan", 1000, &CmdCallback::callback, &cmd_callback);
-	//ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
+	ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
 	
 	ros::spin();
 
