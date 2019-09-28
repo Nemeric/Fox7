@@ -61,7 +61,6 @@
 	<center>
 		<div style="width:200px;height:200px;border:1px solid #000;" id="container1">
 			
-					<input type="button" value="test">
 
 		</div>
 	</center>
@@ -99,10 +98,11 @@
 		
 		var control = new ROSLIB.Topic({
 			ros : ros,
-			name : '/control',
-			messageType : 'std_msgs/String'
+			name : '/controlee',
+			messageType : 'std_msgs/Float32'
 		});
-
+		
+		
 		var btn = document.querySelector('input');
 		var txt = document.querySelector('p');
 
@@ -122,7 +122,7 @@
 			}
 
 			var str_msgs = new ROSLIB.Message({
-				data: str 
+				data: 5.2 
 			});
 			control.publish(str_msgs);
 		}
@@ -140,7 +140,7 @@
 			container: document.getElementById('container2'),
 			mouseSupport: true,
 			stationaryBase: false,
-			//baseX: window.innerWidth /2,
+		//baseX: window.innerWidth /2,
 			baseX: window.innerWidth / 2 ,
 			baseY: window.innerHeight /1.4,
 			//baseY: window.innerHeight /1.4,
@@ -192,18 +192,31 @@
 			cmdVel.publish(twist);
 		}, 1 / 30 * 1000);
 		
+	/*coeff_asserv = new ROSLIB.Topic({
+		ros : ros,
+		name : '/coeff_asserv',
+		messageType : 'std_msgs/Float32'
+	});*/
+		var coeff_asserv = new ROSLIB.Topic({
+			ros : ros,
+			name : '/coeff_asserv',
+			messageType : 'std_msgs/Float32'
+		});
+
 		var coef1 = document.getElementById("coef1").value;
 		var coef2 = document.getElementById("coef2").value;
 		document.getElementById("submit").onclick = displayCoef;		
+
 		function displayCoef(){
 			coef1 = document.getElementById("coef1").value;
 			coef2 = document.getElementById("coef2").value;
 			console.log(coef1,coef2);
-			var str = coef1.toString() + " / " + coef2.toString();
-			var str_msgs = new ROSLIB.Message({
-                                 data: str 
-                         });
-                         control.publish(str_msgs);
+			var coeff_arr = [parseFloat(coef1) , parseFloat(coef2)];
+ 
+			var coef_msgs = new ROSLIB.Message({
+				data: parseFloat(coef1)
+			});
+                         coeff_asserv.publish(coef_msgs);
 
 		}
 		 

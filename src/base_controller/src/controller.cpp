@@ -1,17 +1,22 @@
 #include <ros/ros.h>
 #include <laser_geometry/laser_geometry.h>
 #include <std_msgs/String.h>
+#include <std_msgs/Int32.h>
 #include <pigpiod_if2.h>
 #include <iostream>
 #include <cmath>
 
+// LIDAR
+// ranges[0] -> ranges[810]
+// centre 405
+
 #define GPIO_SERVO 17
 #define GPIO_ESC 18
 
-#define ANGLE_MIN 300
-#define ANGLE_CENTRE 404
-#define ANGLE_MAX 500
-#define PRECISION_LIDAR 0.3
+#define ANGLE_MIN 205
+#define ANGLE_CENTRE 405
+#define ANGLE_MAX 605
+#define PRECISION_LIDAR 0.333
 
 #define CMD_ANGLE_MAX 800
 #define CMD_ANGLE_MIN 0
@@ -19,8 +24,8 @@
 #define SPEED_MAX 0.8
 #define SPEED_MIN 0.1
 #define DISTANCE_MAX 20.0
-#define DISTANCE_MIN 0.2
-#define DIST_URGENCE 0.1
+#define DISTANCE_MIN 0.4
+#define DIST_URGENCE 0.2
 
 using namespace std;
 
@@ -30,9 +35,11 @@ void setSpeed(float speed);
 
 int _PI;
 
+int n=0;
+
 float Kp=1;
-float Ki=1;
-float Kd=1;
+float Ki=0;
+float Kd=0;
 
 const float a=(SPEED_MIN-SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
 const float b=2*DISTANCE_MAX*(SPEED_MAX-SPEED_MIN)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
@@ -41,10 +48,9 @@ const float c=(SPEED_MIN*pow(DISTANCE_MAX,2)-2*DISTANCE_MAX*DISTANCE_MIN*SPEED_M
 class AsservDirection
 {
 public:
-	AsservDirection(float Kp_p, float Ki_p, float Kd_p)
+	AsservDirection()
 		:m_consigne(0),
-		m_integrale(0),m_previous_error(0),
-		m_Kp(Kp_p), m_Ki(Ki_p), m_Kd(Kd_p )
+		m_integrale(0),m_previous_error(0)
 	{}
 
 	float operator()(float angle_dist_max, ros::Duration dt)
@@ -59,7 +65,7 @@ public:
 
 		m_integrale += m_error;
 
-		m_commande = m_Kp*m_error + m_Ki*dt.toSec()*m_integrale + m_Kd/dt.toSec()*m_derivee;
+		m_commande = Kp*m_error + Ki*dt.toSec()*m_integrale + Kd/dt.toSec()*m_derivee;
 
 		return m_commande;
 	}
@@ -78,7 +84,6 @@ private:
 
 	float m_derivee;
 	float m_integrale;
-	const float m_Kp, m_Ki, m_Kd;
 
 	float m_error;
 	float m_consigne;
@@ -88,9 +93,9 @@ class CmdCallback
 {
 public:
 	CmdCallback()
-		:m_last_call(ros::Time::now()), m_dt(0),
+		:m_dt(0),
 		m_run(false), m_arret_urgence(false),
-		asservDirection(Kp,Ki,Kd),
+		asservDirection(),
 		m_d(5)
 	{}
 
@@ -98,6 +103,7 @@ public:
 	{
 		m_dt=ros::Time::now()-m_last_call;
 		m_last_call=ros::Time::now();
+
 
 		if(m_run)
 		{
@@ -125,11 +131,11 @@ public:
 					m_dist_max=m_acc/m_d;
 				}
 			}
-			m_angle_dist_max=m_imax*PRECISION_LIDAR;
+			m_angle_dist_max=(ANGLE_CENTRE-m_imax)*PRECISION_LIDAR;
 
-			ROS_INFO("\nAngleMax=%f\nDistMax=%f", m_dist_max, m_angle_dist_max);
+			ROS_INFO("\nImax=%d\nAngleMax=%f\nDistMax=%f", m_imax, m_angle_dist_max, m_dist_max);
 
-			if(m_dist_max<DIST_URGENCE)
+			if(scan_in->ranges[405]<DIST_URGENCE)
 				m_arret_urgence=true;
 
 			if(!m_arret_urgence)
@@ -141,6 +147,9 @@ public:
 				setSpeed(m_cmd_speed);
 			}
 		}
+
+		else
+			ROS_INFO("ranges[%d]=%f", n, scan_in->ranges[n]);
 	}
 
 	void runON()
@@ -165,6 +174,11 @@ public:
 		m_run=false;
 		m_arret_urgence=false;
 		asservDirection.reset();
+	}
+
+	void initTime()
+	{
+		m_last_call=ros::Time::now();
 	}
 
 private:
@@ -208,7 +222,7 @@ void setDirection(float angle)
 	if(angle < CMD_ANGLE_MIN)
 		angle = CMD_ANGLE_MIN;
 
-	angle = 1000/CMD_ANGLE_MAX * angle + 1500;
+	angle = angle/CMD_ANGLE_MAX * 1000 + 1500;
 	set_servo_pulsewidth(_PI, GPIO_SERVO, angle);
 }
 
@@ -226,14 +240,19 @@ void setSpeed(float speed)
 
 void control_callback(const std_msgs::String::ConstPtr &msg)
 {
-	if(msg->data.c_str()=="Start" && !cmd_callback.running())
+	if(msg->data=="Start" && !cmd_callback.running())
 		cmd_callback.runON();
 
-	else if(msg->data.c_str()=="Stop" && cmd_callback.running())
+	else if(msg->data=="Stop" && cmd_callback.running())
 		cmd_callback.runOFF();
 
-	else if(msg->data.c_str()=="Reset")
+	else if(msg->data=="Reset")
 		cmd_callback.reset();
+}
+
+void n_callback(const std_msgs::Int32::ConstPtr &msg)
+{
+	n=msg->data;
 }
 
 int main(int argc, char** argv)
@@ -248,12 +267,15 @@ int main(int argc, char** argv)
 		return -1;
 	}
 	ROS_INFO("Pigpiod initialized _PI=%d", _PI);
+
+	cmd_callback.initTime();
 	
 	set_mode(_PI, GPIO_SERVO, PI_OUTPUT);
 	set_mode(_PI, GPIO_ESC, PI_OUTPUT);
 
 	ros::Subscriber sub = n.subscribe("scan", 1000, &CmdCallback::callback, &cmd_callback);
 	ros::Subscriber sub2 = n.subscribe("control", 10, control_callback);
+	ros::Subscriber sub3 = n.subscribe("n", 10, n_callback);
 	
 	ros::spin();
 
