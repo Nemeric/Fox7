@@ -5,7 +5,7 @@
 
 #include "constantes.hpp"
 
-float commandDirectionProfil(const sensor_msgs::LaserScan::ConstPtr& scan_in)
+float commandDirection(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 {
 	float consigne_angle=0; // [rad]
 

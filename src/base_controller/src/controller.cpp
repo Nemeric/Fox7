@@ -8,9 +8,17 @@
 
 #include "constantes.hpp"
 
-#include "algo_rectangle.hpp"
-#include "algo_obstacle.hpp"
-#include "algo_profil.hpp"
+// Definition de l'aglorithme utilisé, choisir :
+// ALGO_RECTANGLE, ALGO_OBSTACLE ou ALGO_PROFIL
+#define ALGO_RECTANGLE
+
+#if defined ALGO_RECTANGLE
+	#include "algo_rectangle.hpp"
+#elif defined ALGO_OBSTACLE
+	#include "algo_obstacle.hpp"
+#elif defined ALGO_PROFIL
+	#include "algo_profil.hpp"
+#endif
 
 // LIDAR
 // ranges[0] -> ranges[810]
@@ -100,14 +108,11 @@ public:
 			// ALGO
 			// renvoit consigne_angle
 
-			// m_consigne_angle=commandDirectionRectangle(scan_in);
-			// m_consigne_angle=commandDirectionObstacle(scan_in);
-			// m_consigne_angle=commandDirectionProfil(scan_in);
+			m_consigne_angle=commandDirection(scan_in);
 
 			// distance devant ou celle de l'angle de consigne, a voir
 			m_dist_max=scan_in->ranges[405];
 			//m_dist_max=scan_in->ranges[405+m_consigne_angle/scan_in->angle_increment];
-
 			
 			// Arret d'urgence
 			if(scan_in->ranges[405]<DIST_URGENCE)
