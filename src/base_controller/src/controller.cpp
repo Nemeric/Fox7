@@ -13,16 +13,18 @@
 #define GPIO_SERVO 17
 #define GPIO_ESC 18
 
-#define ANGLE_MIN 205
-#define ANGLE_CENTRE 405
-#define ANGLE_MAX 605
-#define PRECISION_LIDAR 0.333
+#define PI 3.14519265
 
-#define CMD_ANGLE_MAX 800
-#define CMD_ANGLE_MIN 0
+#define ANGLE_MAX PI/2 // [rad]
+#define ANGLE_MIN -PI/2 // [rad]
 
-#define SPEED_MAX 0.8
-#define SPEED_MIN 0.1
+#define CMD_ANGLE_MAX 55*PI/180 // [rad]
+#define CMD_ANGLE_MIN -55*PI/180 // [rad]
+#define INDICE_CENTRE 405
+
+#define CMD_SPEED_MAX 0.4
+#define CMD_SPEED_MIN 0.0 // Garder positive ! ou changer commandSpeed
+
 #define DISTANCE_MAX 20.0
 #define DISTANCE_MIN 0.4
 #define DIST_URGENCE 0.2
@@ -35,15 +37,18 @@ void setSpeed(float speed);
 
 int _PI;
 
+// pour debug
 int n=0;
 
+// Coef d'asserv en direction
 float Kp=1;
 float Ki=0;
 float Kd=0;
 
-const float a=(SPEED_MIN-SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
-const float b=2*DISTANCE_MAX*(SPEED_MAX-SPEED_MIN)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
-const float c=(SPEED_MIN*pow(DISTANCE_MAX,2)-2*DISTANCE_MAX*DISTANCE_MIN*SPEED_MAX+pow(DISTANCE_MIN,2)*SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
+// Coef commande vitesse
+const float a=(CMD_SPEED_MIN-CMD_SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
+const float b=2*DISTANCE_MAX*(CMD_SPEED_MAX-CMD_SPEED_MIN)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
+const float c=(CMD_SPEED_MIN*pow(DISTANCE_MAX,2)-2*DISTANCE_MAX*DISTANCE_MIN*CMD_SPEED_MAX+pow(DISTANCE_MIN,2)*CMD_SPEED_MAX)/(pow(DISTANCE_MAX-DISTANCE_MIN,2));
 
 class AsservDirection
 {
@@ -94,9 +99,8 @@ class CmdCallback
 public:
 	CmdCallback()
 		:m_dt(0),
-		m_run(false), m_arret_urgence(false),
-		asservDirection(),
-		m_d(5)
+		m_run(false), m_arret_urgence(false), m_compteur_urgence(0),
+		asservDirection()
 	{}
 
 	void callback(const sensor_msgs::LaserScan::ConstPtr& scan_in)
@@ -104,43 +108,25 @@ public:
 		m_dt=ros::Time::now()-m_last_call;
 		m_last_call=ros::Time::now();
 
-
 		if(m_run)
 		{
-			m_imax=0;
-			m_dist_max=0;
-			m_angle_dist_max=0;
+			// ALGO
+			// calcule et remplace m_consigne_angle et m_dist_max
+			// [...]
 			
-			// moyenne glissante
-			float valeur=0;
-			for(int i=ANGLE_MIN+(m_d-1)/2; i<ANGLE_MAX-(m_d-1)/2; i++)
-			{
-				m_acc=0;
-				for(int j=i-(m_d-1)/2; j<i+(m_d-1)/2; j++)
-				{
-					// Verif si valeur pas aberante
-					valeur=scan_in->ranges[j];
-					if(valeur>DISTANCE_MAX || valeur==0)
-						valeur=DISTANCE_MAX;
-						
-					m_acc+=valeur;
-				}
-				if(m_acc/m_d>m_dist_max)
-				{
-					m_imax=i;
-					m_dist_max=m_acc/m_d;
-				}
-			}
-			m_angle_dist_max=(ANGLE_CENTRE-m_imax)*PRECISION_LIDAR;
-
-			ROS_INFO("\nImax=%d\nAngleMax=%f\nDistMax=%f", m_imax, m_angle_dist_max, m_dist_max);
-
+			// Arret d'urgence
 			if(scan_in->ranges[405]<DIST_URGENCE)
-				m_arret_urgence=true;
+			{
+				if(m_compteur_urgence<3)
+					++m_compteur_urgence;
+				else
+					m_arret_urgence=true;
+			}
 
+			// commande
 			if(!m_arret_urgence)
 			{
-				m_cmd_angle = asservDirection(m_angle_dist_max, m_dt);
+				m_cmd_angle = asservDirection(m_consigne_angle, m_dt);
 				m_cmd_speed = commandSpeed(m_dist_max);
 
 				setDirection(m_cmd_angle);
@@ -152,20 +138,10 @@ public:
 			ROS_INFO("ranges[%d]=%f", n, scan_in->ranges[n]);
 	}
 
-	void runON()
-	{
-		m_run=true;
-	}
-
-	void runOFF()
-	{
-		m_run=false;
-	}
-
-	bool running()
-	{
-		return m_run;
-	}
+	void runON() {m_run=true;}
+	void runOFF() {m_run=false;}
+	bool running() {return m_run;}
+	void initTime() {m_last_call=ros::Time::now();}
 
 	void reset()
 	{	
@@ -173,28 +149,23 @@ public:
 		m_dt=ros::Duration(0);
 		m_run=false;
 		m_arret_urgence=false;
+		m_compteur_urgence=0;
 		asservDirection.reset();
 	}
 
-	void initTime()
-	{
-		m_last_call=ros::Time::now();
-	}
 
 private:
 	ros::Time m_last_call;
 	ros::Duration m_dt;
 
-	float m_acc;
+	float m_consigne_angle;
 	float m_dist_max;
-	int m_imax;
-	int m_d;
 	float m_cmd_angle;
 	float m_cmd_speed;
-	float m_angle_dist_max;
 
 	bool m_run;
 	bool m_arret_urgence;
+	int m_compteur_urgence;
 
 	AsservDirection asservDirection;
 };
@@ -202,12 +173,15 @@ CmdCallback cmd_callback;
 
 float commandSpeed(float dist_max)
 {
+	// genere une commande en vitesse en fonction de la distance max selon une parabole telle que:
+	// f(DISTANCE_MIN)=CMD_SPEED_MIN, f(DISTANCE_MAX)=CMD_SPEED_MAX et f'(DISTANCE_MAX)=0
+
 	float speed;
 
 	if(dist_max>DISTANCE_MAX)
-		speed = SPEED_MAX;
+		speed = CMD_SPEED_MAX;
 	else if(dist_max<DISTANCE_MIN)
-		speed = SPEED_MIN;
+		speed = CMD_SPEED_MIN;
 	else
 		speed = a*pow(dist_max,2)+b*dist_max+c;
 
@@ -229,10 +203,10 @@ void setDirection(float angle)
 void setSpeed(float speed)
 {
 	//TODO add converstion from speed to ESC plus limitation
-	if(speed > SPEED_MAX)
-		speed = SPEED_MAX;
-	if(speed < -SPEED_MAX)
-		speed = -SPEED_MAX;
+	if(speed > CMD_SPEED_MAX)
+		speed = CMD_SPEED_MAX;
+	if(speed < CMD_SPEED_MIN)
+		speed = CMD_SPEED_MIN;
  	
 	speed = 1000 * speed + 1500;
 	set_servo_pulsewidth(_PI, GPIO_ESC, speed);
