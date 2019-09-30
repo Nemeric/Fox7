@@ -6,6 +6,10 @@
 #include <iostream>
 #include <cmath>
 
+#include "algo_rectangle.hpp"
+#include "algo_obstacle.hpp"
+#include "algo_profil.hpp"
+
 // LIDAR
 // ranges[0] -> ranges[810]
 // centre 405
@@ -111,8 +115,16 @@ public:
 		if(m_run)
 		{
 			// ALGO
-			// calcule et remplace m_consigne_angle et m_dist_max
-			// [...]
+			// renvoit consigne_angle
+
+			// m_consigne_angle=commandDirectionRectangle(scan_in);
+			// m_consigne_angle=commandDirectionObstacle(scan_in);
+			// m_consigne_angle=commandDirectionProfil(scan_in);
+
+			// distance devant ou celle de l'angle de consigne, a voir
+			m_dist_max=scan_in->ranges[405];
+			//m_dist_max=scan_in->ranges[405+m_consigne_angle/scan_in->angle_increment];
+
 			
 			// Arret d'urgence
 			if(scan_in->ranges[405]<DIST_URGENCE)
