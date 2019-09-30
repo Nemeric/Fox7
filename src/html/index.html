@@ -208,32 +208,65 @@
 			cmdVel.publish(twist);
 		}, 1 / 30 * 1000);
 
-		var coeff_asserv = new ROSLIB.Topic({
+
+/********* Definition des Topic *****************/
+		var coeff_asserv_str = new ROSLIB.Topic({
 			ros : ros,
-			name : '/coeff_asserv',
+			name : '/coeff_asserv_str',
 			messageType : 'std_msgs/String'
 		});
 
+		var coeff_asserv_arr = new ROSLIB.Topic({
+			ros : ros,
+			name : '/coeff_asserv_arr',
+			messageType : 'std_msgs/Float32MultiArray'
+		});
+/********** récupération des valeur des coef dans les textBox **************/
 		var Kp = document.getElementById("Kp").value;
 		var Ki = document.getElementById("Ki").value;
 		var Kd = document.getElementById("Kd").value;
 
+/******** Appel de la fonction d'envoie des coef au click sur le bnt 'Submit' ********/
 		document.getElementById("submit").onclick = sendCoef;
 
+/********** definition des parametres du message sous forme de Array ******/
+		var ArrayDim = new ROSLIB.Message({
+			label : "alo",
+			size : 3,
+			stride : 1
+		});
+		var ArrayLayout = new ROSLIB.Message({
+			dim : ArrayDim,
+			data_offset : 0
+		});
+
+
+		/**** fonction d'envoi des coef *******/
 		function sendCoef(){
 
-			var coeff_arr = [parseFloat(Kp) , parseFloat(Ki), parseFloat(Kd)];
-			console.log(parseFloat(Kp), parseFloat(Ki), parseFloat(Kd));
-			console.log(coeff_arr);
 
-			var coeff_str = Kp + ";" + Ki + ";" + Kd;
-			console.log(coeff_str);
+			/***  on transforme les coef recuperes sous forme de String en un Array de float ***/
+			var coef_arr = [parseFloat(Kp) , parseFloat(Ki), parseFloat(Kd)];
 
-			var coef_msgs = new ROSLIB.Message({
+			console.log(coef_arr);
+
+			/**** on concatene les chaines de caractere ****/
+			var coef_str = Kp + ";" + Ki + ";" + Kd;
+			console.log(coef_str);
+
+			/*** creation des messages sous les deux formes (String et Array) ******/
+			var coef_str_msgs = new ROSLIB.Message({
 				data: parseFloat(Kp)
 			});
 
-			coeff_asserv.publish(coef_msgs);
+			var coef_arr_msgs = new ROSLIB.Message({
+				layout = ArrayLayout,
+				data : coef_arr
+			});
+
+			/**** envoi des messages ******/
+			coeff_asserv_str.publish(coef_str_msgs);
+			coeff_asserv_arr.publish(coef_arr_msgs);
 
 		}
 
