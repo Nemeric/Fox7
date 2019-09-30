@@ -251,17 +251,16 @@
 			console.log(coef_arr);
 
 			/**** on concatene les chaines de caractere ****/
-			var coef_str = Kp + ";" + Ki + ";" + Kd;
+			var coef_str = Kp.toString() + ";" + Ki.toString() + ";" + Kd.toString();
 			console.log(coef_str);
 
 			/*** creation des messages sous les deux formes (String et Array) ******/
-			var coef_str_msgs = new ROSLIB.Message({
-				data: parseFloat(Kp)
+			var coef_arr_msgs = new ROSLIB.Message({
+				data: coef_arr
 			});
 
-			var coef_arr_msgs = new ROSLIB.Message({
-				layout = ArrayLayout,
-				data : coef_arr
+			var coef_str_msgs = new ROSLIB.Message({
+				data : coef_str
 			});
 
 			/**** envoi des messages ******/
