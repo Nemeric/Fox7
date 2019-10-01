@@ -71,7 +71,7 @@ float commandDirection(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 
 		// cherche max
 		if(dist>dmax)
-			dmax=scan_in->ranges[i];
+			dmax=dist;
 	}
 
 	// on fait la moyenne sur un certain pourcentage
