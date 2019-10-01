@@ -34,9 +34,9 @@ float commandDirection(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	float consigne_angle=0; // [rad]
 
 	/*
-	-> cherche Dmax, angle max
+	-> cherche Dmax
 		-> fixe une distance max ou on voit
-		-> trouver imax
+		-> trouver dmax
 		-> recuperer tous indices supérieurs a un pourcentage de la distance max
 		-> centre de cette zone (moyenne), on obtient meilleur angle max
 
@@ -59,28 +59,23 @@ float commandDirection(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	-> on vise la direction en rectangle_angle_max
 	*/
 
-	// cherche imax
-	float imax=0;
+	// cherche dmax
 	float dmax=scan_in->ranges[0];
 	float dist=0;
-	int pourcentage=95;
 	for(int i=INDICE_MIN+1; i<INDICE_MAX; i++)
 	{
 		// on borne distance vu
+		dist=scan_in->ranges[i];
 		if(scan_in->ranges[i]>DISTANCE_MAX)
 			dist=DISTANCE_MAX;
-		else
-			dist=scan_in->ranges[i];
 
 		// cherche max
-		if(scan_in->ranges[i]>dmax)
-		{
-			imax=i;
+		if(dist>dmax)
 			dmax=scan_in->ranges[i];
-		}
 	}
 
 	// on fait la moyenne sur un certain pourcentage
+	int pourcentage=95;
 	int imoymax=0;
 	int nbi=0;
 	for(int i=INDICE_MIN; i<INDICE_MAX; i++)
@@ -107,7 +102,7 @@ float commandDirection(const sensor_msgs::LaserScan::ConstPtr& scan_in)
 	{
 		// generer 1er rectangle
 		largeur_rectangle=genererRectangle(angle, angle_ecart, &longueur_rectangle, scan_in);
-		// on continue de l'agrandir jusqu'à ce que sa largeur depasse celle de la voiture
+		// on continue de l'agrandir jusqu'a ce que sa largeur depasse celle de la voiture
 		while(largeur_rectangle<LARGEUR_VOITURE)
 		{
 			angle_ecart+=scan_in->angle_increment;

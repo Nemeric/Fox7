@@ -10,8 +10,8 @@
 #define ANGLE_MAX PI/2 // [rad]
 #define ANGLE_MIN -PI/2 // [rad]
 
-#define CMD_ANGLE_MAX 55*PI/180 // [rad]
-#define CMD_ANGLE_MIN -55*PI/180 // [rad]
+#define CMD_ANGLE_MAX 40*PI/180 // [rad]
+#define CMD_ANGLE_MIN -40*PI/180 // [rad]
 
 #define INDICE_MAX 810
 #define INDICE_CENTRE 405
